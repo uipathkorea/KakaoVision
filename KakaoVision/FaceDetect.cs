@@ -10,6 +10,16 @@ using System.IO;
 
 namespace KakaoVision
 {
+    class Gender
+    {
+        public double male { get; set; }
+        public double femail { get; set; }
+    }
+    class FacialAttribute : Object
+    {
+        public double age { get; set; }
+        public Gender gender { get; set; } 
+    }
 
     public sealed class FaceDetect : CodeActivity
     {
@@ -37,6 +47,8 @@ namespace KakaoVision
         public OutArgument<double> Female { get; set; }
         [Category("Output")]
         public OutArgument<double> Age { get; set; }
+        [Category("Output")]
+        public OutArgument<string> Response { get; set; }
         //오류 코드 값 
         [Category("Output")]
         public OutArgument<string> ErrorCode { get; set; }
@@ -48,7 +60,7 @@ namespace KakaoVision
         // Execute 메서드에서 값을 반환합니다.
         protected override void Execute(CodeActivityContext context)
         {
-            var rest_api_key = RestApiKey.Get(context);
+            var rest_api_key = context.GetValue(RestApiKey);
             var file_path = context.GetValue(FilePath);
             var image_url = context.GetValue(ImageUrl);
             var threshold = context.GetValue(Threshold);
@@ -91,19 +103,27 @@ namespace KakaoVision
                 var body = new StringContent(String.Format("image_url={0}", image_url), Encoding.UTF8, "application/x-www-form-urlencoded");
                 response = client.PostAsync(API_ENDPOINT, body).Result;
             }
-
-            if( response.IsSuccessStatusCode)
+            //System.Console.WriteLine(string.Format("StatusCode : {0}", response.StatusCode));
+            if( response != null && response.IsSuccessStatusCode)
             {
+                double age = 0, male = 0.0, female = 0.0;
                 var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                //System.Console.WriteLine(content);
                 var jsonresp = JObject.Parse(content);
-                System.Console.WriteLine(content);
-                double male = (double)jsonresp["result"]["faces"][0]["facial_attributes"]["gender"]["male"];
-                double female = (double)jsonresp["result"]["faces"][0]["facial_attributes"]["gender"]["female"];
-                double age = (double)jsonresp["result"]["faces]"][0]["facial_attributes"]["age"];
+                var faces = (JArray)jsonresp["result"]["faces"];
+                //System.Console.WriteLine("Number of Faces : {0} and Faces data : {1}", faces.Count, faces.ToString());
+                if( faces.Count > 0)
+                {
+                    male = (double)faces[0]["facial_attributes"]["gender"]["male"];
+                    female = (double)faces[0]["facial_attributes"]["gender"]["female"];
+                    age = (double)faces[0]["facial_attributes"]["age"];
+                }
 
                 Male.Set(context, male);
                 Female.Set(context, female);
                 Age.Set(context, age);
+                Response.Set(context, content);
+                ErrorCode.Set(context, "OK");
             }
             else
             {
@@ -111,6 +131,7 @@ namespace KakaoVision
                 Male.Set(context, 0.0);
                 Female.Set(context, 0.0);
                 Age.Set(context, 0.0);
+                Response.Set(context, string.Empty);
             }
         }
     }
